@@ -732,7 +732,8 @@ nav.toc{background:rgba(250,246,238,.92) !important}
 
   <div class="flexhead" style="margin-top:22px"><div class="sec-head" style="margin:0"><h2 style="font-size:15px">🗺️ กระดานเดียว: Area / Shop × ทุกรุ่น (Cross-Tab)</h2>
     <p>เห็นยอดขาย (หรือสต็อก) ของทั้ง 7 รุ่น เทียบกันในตารางเดียว ต่อ 1 แถว = 1 พื้นที่ หรือ 1 ร้าน · สีพื้นหลังเข้ม = ตัวเลขสูงเทียบกับแถวอื่นในคอลัมน์เดียวกัน<br>
-    🔗 Filter กรองแบบเป็นขั้น: เลือก Zone ก่อน ตัวเลือกใน AREA จะเหลือเฉพาะที่อยู่ใน Zone นั้น · เลือก Area แล้ว Type/Shop จะกรองตาม · เลือก Type แล้ว Shop จะกรองตามอีกที</p></div>
+    🔗 Filter กรองแบบเป็นขั้น: เลือก Zone ก่อน ตัวเลือกใน AREA จะเหลือเฉพาะที่อยู่ใน Zone นั้น · เลือก Area แล้ว Type/Shop จะกรองตาม · เลือก Type แล้ว Shop จะกรองตามอีกที<br>
+    📦 Cover Week คำนวณจากยอดขายเฉลี่ยย้อนหลัง 4 สัปดาห์ (ต่อจากเดือนก่อนให้อัตโนมัติช่วงต้นเดือน) หารด้วยสต็อกคงเหลือ ไม่ใช้ยอด MTD เพื่อไม่ให้ค่าแกว่งช่วงต้นเดือน</p></div>
     <button id="emCtExportBtn" class="export-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>Export Excel</button></div>
 
   <div class="filterbar">
@@ -746,7 +747,7 @@ nav.toc{background:rgba(250,246,238,.92) !important}
     </div>
     <span class="heatlab">เน้นสีตาม:</span>
     <div class="metric-toggle" id="emMetricToggle">
-      <button data-m="aq" class="on">Actual Qty</button><button data-m="sq">Stock Qty</button><button data-m="cover">Cover Week</button>
+      <button data-m="aq" class="on">Actual Qty</button><button data-m="sq">Stock Qty</button><button data-m="cover">Cover Week (4W)</button>
     </div>
   </div>
   <div id="emActiveFilters" style="margin-bottom:12px"></div>
@@ -2957,7 +2958,7 @@ const EM_MODELS=[
 ];
 let EM_TARGETS={};EM_MODELS.forEach(m=>EM_TARGETS[m.key]=m.tg);
 const EM_COLOR_THEMES={navy:{rgb:'100,140,185',maxA:0.55},gold:{rgb:'184,134,46',maxA:0.85},teal:{rgb:'15,118,110',maxA:0.85},plum:{rgb:'122,45,90',maxA:0.85},slate:{rgb:'63,79,104',maxA:0.85}};
-const EM_METRIC_LABEL={aq:'Actual',sq:'Stock',cover:'Cover Week'};
+const EM_METRIC_LABEL={aq:'Actual',sq:'Stock',cover:'Cover Week (4W)'};
 let emGroupBy='area',emMetric='aq',emColorTheme='navy';
 let emCtSort={col:'TOTAL',dir:-1},emDayHeatSort={col:'tot',dir:-1};
 const FS_EM=newFS();
@@ -3264,17 +3265,21 @@ function emInitFilters(){
 }
 
 function emCoverOf(aq,sq,nd){if(aq>0)return sq*nd/aq/7;if(sq>0)return Infinity;return null;}
-function emCellVal(aq,sq,nd){return emMetric==='aq'?aq:emMetric==='sq'?sq:emCoverOf(aq,sq,nd);}
+// Cover Week ในตารางไขว้ใช้ยอดขายย้อนหลัง 4 สัปดาห์ (28 วัน ต่อจากเดือนก่อนให้อัตโนมัติ) แทน MTD
+// เพราะต้นเดือนที่ยังไม่มียอดจะขึ้น ∞ ทั้งที่จริงมีการขายอยู่ และค่าจะไม่แกว่งตามจำนวนวันที่ผ่านไปในเดือน
+function emCover28Of(aq28,sq){return emCoverOf(aq28,sq,EM_COVER_WIN);}
+function emCellVal(aq,sq,nd,aq28){return emMetric==='aq'?aq:emMetric==='sq'?sq:emCover28Of(aq28||0,sq);}
 const EM_LIGHT_INFO={sub:'var(--sub)',warn:'var(--neg)'};
-function emCellHtml(aq,sq,nd,info){
+function emCellHtml(aq,sq,nd,info,aq28){
   info=info||EM_LIGHT_INFO;
-  if(!aq&&!sq)return '-';
-  const cover=emCoverOf(aq,sq,nd);
+  aq28=aq28||0;
+  if(!aq&&!sq&&!aq28)return '-';
+  const cover=emCover28Of(aq28,sq);
   const mainTxt=aq>0?num(aq):'0';
   let sub='';
-  if(sq>0&&aq>0){sub=`<div class="ct-sub" style="color:${info.sub}">Stock ${num(sq)} (${cover.toFixed(1)}wk)</div>`;}
-  else if(sq>0&&aq===0){sub=`<div class="ct-sub" style="color:${info.warn};font-weight:800">Stock ${num(sq)} (∞)</div>`;}
-  else if(sq===0&&aq>0){sub=`<div class="ct-sub" style="color:${info.warn};font-weight:800">Stock 0 ⚠</div>`;}
+  if(sq>0&&cover!=null&&cover!==Infinity){sub=`<div class="ct-sub" style="color:${info.sub}">Stock ${num(sq)} (${cover.toFixed(1)}wk)</div>`;}
+  else if(sq>0){sub=`<div class="ct-sub" style="color:${info.warn};font-weight:800">Stock ${num(sq)} (∞)</div>`;}
+  else if(aq>0||aq28>0){sub=`<div class="ct-sub" style="color:${info.warn};font-weight:800">Stock 0 ⚠</div>`;}
   return `<div class="ct-main">${mainTxt}</div>${sub}`;
 }
 function emRelLum(r,g,b){const lin=c=>{c/=255;return c<=0.04045?c/12.92:Math.pow((c+0.055)/1.055,2.4);};return 0.2126*lin(r)+0.7152*lin(g)+0.0722*lin(b);}
@@ -3295,17 +3300,20 @@ function emTdStyle(info){return `background:${info.bg};color:${info.main};font-w
 function emBuildRows(codes){
   const meta=emShopMeta();
   const byShop=emRowsByShop();
+  const t28={};EM_MODELS.forEach(m=>t28[m.key]=emTrail28ByShop(m.key));
   const rows={};
   codes.forEach(code=>{
     const s=meta[code];if(!s)return;
     const key=emGroupBy==='area'?s.area:code;
-    const row=rows[key]=rows[key]||{name:emGroupBy==='area'?s.area:s.name,area:s.area,type:emGroupBy==='shop'?s.type:null,aqBy:{},sqBy:{},sumAq:0,sumSq:0};
+    const row=rows[key]=rows[key]||{name:emGroupBy==='area'?s.area:s.name,area:s.area,type:emGroupBy==='shop'?s.type:null,aqBy:{},sqBy:{},aq28By:{},sumAq:0,sumSq:0,sumAq28:0};
     EM_MODELS.forEach(m=>{
       const rec=(byShop[m.key]||{})[code];
       const aq=rec?(rec.aq||0):0,sq=rec?(rec.sq||0):0;
+      const a28=(t28[m.key]||{})[code]||0;
       row.aqBy[m.key]=(row.aqBy[m.key]||0)+aq;
       row.sqBy[m.key]=(row.sqBy[m.key]||0)+sq;
-      row.sumAq+=aq;row.sumSq+=sq;
+      row.aq28By[m.key]=(row.aq28By[m.key]||0)+a28;
+      row.sumAq+=aq;row.sumSq+=sq;row.sumAq28+=a28;
     });
   });
   return Object.values(rows);
@@ -3330,7 +3338,7 @@ function emRenderCrossTab(){
   emRenderMini(codes);
   const rows=emBuildRows(codes);
   const nd=EM_ND();
-  rows.forEach(r=>{r.vals={};EM_MODELS.forEach(m=>r.vals[m.key]=emCellVal(r.aqBy[m.key]||0,r.sqBy[m.key]||0,nd));r.total=emCellVal(r.sumAq,r.sumSq,nd);});
+  rows.forEach(r=>{r.vals={};EM_MODELS.forEach(m=>r.vals[m.key]=emCellVal(r.aqBy[m.key]||0,r.sqBy[m.key]||0,nd,r.aq28By[m.key]||0));r.total=emCellVal(r.sumAq,r.sumSq,nd,r.sumAq28);});
   const finiteMax=arr=>Math.max(1,...arr.filter(v=>v!=null&&v!==Infinity));
   const colMax={};EM_MODELS.forEach(m=>colMax[m.key]=finiteMax(rows.map(r=>r.vals[m.key])));
   const totalMax=finiteMax(rows.map(r=>r.total));
@@ -3352,18 +3360,18 @@ function emRenderCrossTab(){
   const bodyRows=sorted.map(r=>{
     let tds=`<td class="name">${esc(r.name)}</td>`;
     if(emGroupBy==='shop')tds+=`<td class="name ct-area">${esc(r.area)}</td><td class="name ct-type">${esc(r.type||'-')}</td>`;
-    tds+=EM_MODELS.map(m=>{const info=emHeatInfo(r.vals[m.key],colMax[m.key]);return `<td style="${emTdStyle(info)}">${emCellHtml(r.aqBy[m.key]||0,r.sqBy[m.key]||0,nd,info)}</td>`;}).join('');
+    tds+=EM_MODELS.map(m=>{const info=emHeatInfo(r.vals[m.key],colMax[m.key]);return `<td style="${emTdStyle(info)}">${emCellHtml(r.aqBy[m.key]||0,r.sqBy[m.key]||0,nd,info,r.aq28By[m.key]||0)}</td>`;}).join('');
     const totInfo=emHeatInfo(r.total,totalMax);
-    tds+=`<td style="${emTdStyle(totInfo)};font-weight:800">${emCellHtml(r.sumAq,r.sumSq,nd,totInfo)}</td>`;
+    tds+=`<td style="${emTdStyle(totInfo)};font-weight:800">${emCellHtml(r.sumAq,r.sumSq,nd,totInfo,r.sumAq28)}</td>`;
     return `<tr>${tds}</tr>`;
   }).join('');
-  const footAq={},footSq={};let footSumAq=0,footSumSq=0;
-  EM_MODELS.forEach(m=>{footAq[m.key]=rows.reduce((s,r)=>s+(r.aqBy[m.key]||0),0);footSq[m.key]=rows.reduce((s,r)=>s+(r.sqBy[m.key]||0),0);});
-  rows.forEach(r=>{footSumAq+=r.sumAq;footSumSq+=r.sumSq;});
+  const footAq={},footSq={},footAq28={};let footSumAq=0,footSumSq=0,footSumAq28=0;
+  EM_MODELS.forEach(m=>{footAq[m.key]=rows.reduce((s,r)=>s+(r.aqBy[m.key]||0),0);footSq[m.key]=rows.reduce((s,r)=>s+(r.sqBy[m.key]||0),0);footAq28[m.key]=rows.reduce((s,r)=>s+(r.aq28By[m.key]||0),0);});
+  rows.forEach(r=>{footSumAq+=r.sumAq;footSumSq+=r.sumSq;footSumAq28+=r.sumAq28;});
   let footCols=`<td class="name">TOTAL</td>`;
   if(emGroupBy==='shop')footCols+=`<td></td><td></td>`;
-  footCols+=EM_MODELS.map(m=>`<td>${emCellHtml(footAq[m.key],footSq[m.key],nd)}</td>`).join('');
-  footCols+=`<td>${emCellHtml(footSumAq,footSumSq,nd)}</td>`;
+  footCols+=EM_MODELS.map(m=>`<td>${emCellHtml(footAq[m.key],footSq[m.key],nd,null,footAq28[m.key])}</td>`).join('');
+  footCols+=`<td>${emCellHtml(footSumAq,footSumSq,nd,null,footSumAq28)}</td>`;
   const tbl=document.getElementById('emCtTable');if(!tbl)return;
   tbl.innerHTML=`<thead><tr>${theadCols}</tr></thead><tbody>${bodyRows||`<tr><td colspan="99" class="mini">ไม่มีข้อมูลตามตัวกรองนี้</td></tr>`}</tbody><tfoot><tr class="totrow">${footCols}</tr></tfoot>`;
   tbl.querySelectorAll('thead th.sortable').forEach(th=>{
@@ -3371,13 +3379,14 @@ function emRenderCrossTab(){
       emCtSort.dir=(emCtSort.col===c)?-emCtSort.dir:def;emCtSort.col=c;emRenderCrossTab();};
   });
   const expHead=[nameLab].concat(emGroupBy==='shop'?['AREA','TYPE']:[])
-    .concat(EM_MODELS.flatMap(m=>[m.short+' - Actual Qty',m.short+' - Stock Qty']))
-    .concat(['TOTAL - Actual Qty','TOTAL - Stock Qty']);
+    .concat(EM_MODELS.flatMap(m=>[m.short+' - Actual Qty',m.short+' - Stock Qty',m.short+' - Sales 4W',m.short+' - Cover Week (4W)']))
+    .concat(['TOTAL - Actual Qty','TOTAL - Stock Qty','TOTAL - Sales 4W','TOTAL - Cover Week (4W)']);
   const expRows=sorted.map(r=>{
     let row=[r.name];
     if(emGroupBy==='shop')row=row.concat([r.area||'',r.type||'']);
-    EM_MODELS.forEach(m=>{row.push(r.aqBy[m.key]||0);row.push(r.sqBy[m.key]||0);});
-    row.push(r.sumAq,r.sumSq);
+    const cvTxt=c=>c==null?'':(c===Infinity?'Inf':+c.toFixed(1));
+    EM_MODELS.forEach(m=>{row.push(r.aqBy[m.key]||0);row.push(r.sqBy[m.key]||0);row.push(r.aq28By[m.key]||0);row.push(cvTxt(emCover28Of(r.aq28By[m.key]||0,r.sqBy[m.key]||0)));});
+    row.push(r.sumAq,r.sumSq,r.sumAq28,cvTxt(emCover28Of(r.sumAq28,r.sumSq)));
     return row;
   });
   const ctExpBtn=document.getElementById('emCtExportBtn');
